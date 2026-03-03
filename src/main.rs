@@ -25,7 +25,7 @@ enum Commands {
     Remove,
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
@@ -53,22 +53,20 @@ fn main() {
 
             let title = args[2].clone();
             // create a new todo and save it to database
-            let task = Todo::new(title, Status::ToDo);
-            task.save();
+            let task = Todo::create(title, Status::ToDo);
+            match task.save() {
+                Ok(()) => println!("Task added successfully!"),
+                Err(err) => println!("Error adding task: {}", err),
+            }
         }
-        Commands::List => todo::list(false), // list all todos from database
+        Commands::List => todo::list(false)?, // list all todos from database
         Commands::Mark => {
             // show a menu to select the todo to mark as done / progress / todo
             println!("Select the TODO that you wish to change status.");
-            todo::list(true);
+            todo::list(true)?;
             print!("Your selection: ");
             let mut todo_id = String::new();
             io::stdin().read_line(&mut todo_id).unwrap_or_default();
-
-            let todo_id: i32 = todo_id.parse().unwrap_or_else(|err| {
-                println!("Error parsing user input: {}", err);
-                return 0;
-            });
 
             // ask for the new status
             println!("You have selected: ");
@@ -94,5 +92,5 @@ fn main() {
         }
     }
 
-    print!("hello, world!");
+    Ok(())
 }

@@ -1,23 +1,17 @@
+use anyhow::Context;
 use std::fs;
 use std::path::Path;
 
-struct Database {
-    base: String,
-    todos_path: String,
-}
+pub const _BASE_PATH: &str = "/app_data";
+pub const TODOS_PATH: &str = "/app_data/todos";
 
-impl Database {
-    fn new() -> anyhow::Result<Self> {
-        let path = Path::new("/app_data/todos");
-        if !path.exists() {
-            fs::create_dir_all(path)?;
-        }
-
-        Ok(Database {
-            base: String::from("/app_data"),
-            todos_path: String::from("/app_data/todos"),
-        })
+pub fn init() -> anyhow::Result<()> {
+    let path = Path::new(TODOS_PATH);
+    if !path.exists() {
+        fs::create_dir_all(path).context("Database initialization failed")?;
     }
+
+    Ok(())
 }
 
 // use std::sync::OnceLock;
