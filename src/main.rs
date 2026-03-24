@@ -13,8 +13,10 @@
  */
 mod todo;
 
+use anyhow::Context;
 use std::env;
 use std::io;
+use std::io::Write;
 use std::process;
 use todo::{Status, Todo};
 
@@ -26,6 +28,7 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
+    // parse arguments to determine the command to execute
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
@@ -36,7 +39,7 @@ fn main() -> anyhow::Result<()> {
     let command = match args[1].as_str() {
         "add" => Commands::Add,
         "list" => Commands::List,
-        "done" => Commands::Mark,
+        "mark" => Commands::Mark,
         "remove" => Commands::Remove,
         _ => {
             println!("Invalid command");
@@ -44,6 +47,7 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
+    // execute the command
     match command {
         Commands::Add => {
             if args.len() < 3 {
@@ -59,36 +63,48 @@ fn main() -> anyhow::Result<()> {
                 Err(err) => println!("Error adding task: {}", err),
             }
         }
-        Commands::List => todo::list(false)?, // list all todos from database
+        Commands::List => {
+            todo::list(false)?;
+        }
         Commands::Mark => {
-            // show a menu to select the todo to mark as done / progress / todo
-            println!("Select the TODO that you wish to change status.");
-            todo::list(true)?;
-            print!("Your selection: ");
-            let mut todo_id = String::new();
-            io::stdin().read_line(&mut todo_id).unwrap_or_default();
+            // show menu to select a todo
+            if let Some(id) = todo::list(true)? {
+                // show menu to select the new status
+                println!("Available status:");
+                for (idx, status) in Status::ALL_STATUSES.iter().enumerate() {
+                    println!("{}. {:?}", idx + 1, status);
+                }
 
-            // ask for the new status
-            println!("You have selected: ");
-            print!("New status: ");
-            let mut new_status = String::new();
-            io::stdin().read_line(&mut new_status).unwrap_or_default();
+                print!("New status (Type the number): ");
+                let mut status_idx = String::new();
+                io::stdout().flush().unwrap_or_default(); // ensure the prompt is printed before reading input
+                io::stdin().read_line(&mut status_idx).unwrap_or_default();
 
-            let new_status = match new_status.as_str() {
-                "todo" => Some(Status::ToDo),
-                "progress" => Some(Status::Progress),
-                "Done" => Some(Status::Done),
-                _ => None,
-            };
+                let status_idx = status_idx
+                    .trim()
+                    .parse::<usize>()
+                    .context("Invalid status selection")?;
+                let new_status = Status::ALL_STATUSES
+                    .get(status_idx - 1)
+                    .context("Status selection out of range")?;
+                println!("You have selected: {:?}", new_status);
 
-            // update the status of the selected todo
-            let selected_todo = todo::get(todo_id);
-
-            // save the updated todo in database
-            // todo::mark()
+                // update the status of the selected todo
+                if let Ok(_) = todo::mark(&id, new_status.clone()) {
+                    println!("Task status updated successfully!");
+                } else {
+                    println!("Error updating task status");
+                }
+            }
         }
         Commands::Remove => {
-            // todo::remove()
+            if let Some(id) = todo::list(true)? {
+                if let Ok(_) = todo::remove(&id) {
+                    println!("Task removed successfully!");
+                } else {
+                    println!("Error removing task");
+                }
+            }
         }
     }
 

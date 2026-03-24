@@ -8,15 +8,21 @@
 // use crate::services::todo as db;
 // use services::todo as db;
 mod services;
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use services::todo as db;
+use std::io::{self, Write};
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Status {
     ToDo,
     Progress,
     Done,
+}
+
+impl Status {
+    pub const ALL_STATUSES: [Status; 3] = [Status::ToDo, Status::Progress, Status::Done];
 }
 
 #[derive(Serialize, Deserialize)]
@@ -28,15 +34,6 @@ pub struct Todo {
 }
 
 impl Todo {
-    fn new(id: String, title: String, status: Status, created_at: String) -> Self {
-        Todo {
-            id,
-            title,
-            status,
-            created_at,
-        }
-    }
-
     pub fn create(title: String, status: Status) -> Self {
         Todo {
             id: Uuid::new_v4().simple().to_string(),
@@ -49,7 +46,7 @@ impl Todo {
         self.title = value
     }
 
-    pub fn _set_status(&mut self, value: Status) {
+    pub fn set_status(&mut self, value: Status) {
         self.status = value
     }
 
@@ -66,29 +63,56 @@ impl Todo {
     }
 }
 
-pub fn list(as_menu: bool) -> anyhow::Result<()> {
+pub fn list(as_menu: bool) -> anyhow::Result<Option<String>> {
     let todos = db::get_all()?;
-    let mut count = 0;
 
-    println!("ToDo List:");
-    for todo in &todos {
-        count += 1;
-        if as_menu {
+    if as_menu {
+        let mut count = 0;
+        // show menu to select a todo
+        println!("Select the ToDo that you wish to change status:");
+        for todo in &todos {
+            count += 1;
             todo.display(Some(count));
-        } else {
-            todo.display(None);
         }
-    }
 
+        let mut selected = String::new();
+        print!("ToDo (Type the number): ");
+        io::stdout().flush().unwrap_or_default();
+        io::stdin().read_line(&mut selected).unwrap_or_default();
+
+        let idx = selected
+            .trim()
+            .parse::<usize>()
+            .context("incorrect todo selection. The selection should be a integer")?;
+
+        match todos.get(idx - 1) {
+            Some(todo) => {
+                println!("You have selected: {}", todo.title);
+                return Ok(Some(todo.id.clone()));
+            }
+            None => anyhow::bail!(
+                "Invalid selection. Please select a number between 1 and {}",
+                todos.len()
+            ),
+        };
+    } else {
+        println!("ToDo List:");
+        todos.iter().for_each(|todo| todo.display(None));
+        Ok(None)
+    }
+}
+
+pub fn get(id: &String) -> anyhow::Result<Todo> {
+    db::get_by_id(id)
+}
+
+pub fn mark(id: &String, status: Status) -> anyhow::Result<()> {
+    let mut todo = get(id)?;
+    todo.set_status(status);
+    todo.save()?;
     Ok(())
 }
 
-pub fn get(id: String) -> Option<Todo> {
-    let id = Uuid::parse_str(&id);
-    if let Ok(id) = id {
-        return db::get_by_id(id);
-    }
-    None
+pub fn remove(id: &String) -> anyhow::Result<()> {
+    db::delete(id)
 }
-
-pub fn _mark() {}
